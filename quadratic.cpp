@@ -1,79 +1,75 @@
 #include <bits/stdc++.h>
-#include "nlohmann/json.hpp"
-
+#include "json.hpp"
 using namespace std;
 using json = nlohmann::json;
 
-// Convert string in given base to decimal
-long long decodeValue(const string &value, int base) {
-    return stoll(value, nullptr, base);
+// Decode base-n encoded string into integer
+long long decodeBaseN(const string &s, int base) {
+    long long val = 0;
+    for (char c : s) {
+        int digit;
+        if (c >= '0' && c <= '9') digit = c - '0';
+        else if (c >= 'a' && c <= 'z') digit = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'Z') digit = c - 'A' + 10;
+        else digit = 0; // fallback
+        val = val * base + digit;
+    }
+    return val;
 }
 
-// Lagrange interpolation at x=0
-double lagrangeInterpolation(const vector<pair<int, long long>> &points, int k) {
-    double y = 0.0;
+// Function to solve secret (c) from JSON file
+long double solveFromJson(const string &filename) {
+    ifstream f(filename);
+    if (!f.is_open()) {
+        cerr << "Error: Cannot open " << filename << endl;
+        return -1;
+    }
 
+    json data;
+    f >> data;
+
+    int n = data["keys"]["n"];
+    int k = data["keys"]["k"];
+
+    vector<long double> X, Y;
+
+    // Collect first k points from JSON
+    for (auto &el : data.items()) {
+        if (el.key() == "keys") continue;
+        if ((int)X.size() == k) break;
+
+        int x = stoi(el.key());
+        int base = stoi(el.value()["base"].get<string>());
+        string ystr = el.value()["value"];
+        long long y = decodeBaseN(ystr, base);
+
+        X.push_back(x);
+        Y.push_back(y);
+    }
+
+    // Lagrange interpolation at x=0 to find constant term (secret)
+    long double c = 0.0;
     for (int i = 0; i < k; i++) {
-        double xi = points[i].first;
-        double yi = points[i].second;
-        double numerator = 1.0, denominator = 1.0;
-
+        long double term = Y[i];
         for (int j = 0; j < k; j++) {
-            if (j != i) {
-                double xj = points[j].first;
-                numerator *= (0.0 - xj);
-                denominator *= (xi - xj);
-            }
+            if (i == j) continue;
+            term *= (0 - X[j]) / (X[i] - X[j]);
         }
-        y += (numerator / denominator) * yi;
+        c += term;
     }
-    return y;
+
+    return c;
 }
 
-int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        cerr << "Usage: " << argv[0] << " <json-file>" << endl;
-        return 1;
-    }
+int main() {
+    cout << fixed << setprecision(0);
 
-    try {
-        // Read JSON file (first argument)
-        ifstream inFile(argv[1]);
-        if (!inFile) {
-            cerr << "Error: Could not open " << argv[1] << endl;
-            return 1;
-        }
+    long double c1 = solveFromJson("testcase1.json");
+    if (c1 != -1) cout << "Secret from testcase1.json = " << c1 << endl;
 
-        json obj;
-        inFile >> obj;
-
-        // Extract n and k
-        int n = obj["keys"]["n"];
-        int k = obj["keys"]["k"];
-
-        // Extract points
-        vector<pair<int, long long>> points;
-        for (auto& [key, val] : obj.items()) {
-            if (key == "keys") continue;
-            int x = stoi(key);
-            int base = stoi(val["base"].get<string>());
-            string valueStr = val["value"].get<string>();
-            long long y = decodeValue(valueStr, base);
-            points.push_back({x, y});
-        }
-
-        // Sort points by x
-        sort(points.begin(), points.end());
-
-        // Use first k points for Lagrange interpolation at x=0
-        double secret = lagrangeInterpolation(points, k);
-
-        cout << llround(secret) << endl;  // print only secret value
-
-    } catch (exception &e) {
-        cerr << "Exception: " << e.what() << endl;
-        return 1;
-    }
+    long double c2 = solveFromJson("testcase2.json");
+    if (c2 != -1) cout << "Secret from testcase2.json = " << c2 << endl;
 
     return 0;
 }
+
